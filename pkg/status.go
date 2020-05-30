@@ -1,4 +1,4 @@
-package main
+package pkg
 
 func makeStatus(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildren) *CloudEndpointControllerStatus {
 	status := CloudEndpointControllerStatus{

@@ -1,4 +1,4 @@
-package main
+package pkg
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"sort"
@@ -15,44 +14,20 @@ import (
 	"strings"
 
 	"github.com/ghodss/yaml"
-
 	servicemanagement "google.golang.org/api/servicemanagement/v1"
+	"html/template"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var (
-	config       Config
-	templatePath string
-)
-
-func init() {
-	config = Config{
-		Project:    "", // Derived from instance metadata server
-		ProjectNum: "", // Derived from instance metadata server
-	}
-
-	if err := config.loadAndValidate(); err != nil {
-		log.Fatalf("Error loading config: %v", err)
-	}
-}
-
-func main() {
-	http.HandleFunc("/healthz", healthzHandler())
-	http.HandleFunc("/", webhookHandler())
-
-	log.Printf("[INFO] Initialized controller on port 80\n")
-	log.Fatal(http.ListenAndServe(":80", nil))
-}
-
-func healthzHandler() func(w http.ResponseWriter, r *http.Request) {
+func HealthzHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK\n")
 	}
 }
 
-func webhookHandler() func(w http.ResponseWriter, r *http.Request) {
+func WebhookHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -105,11 +80,11 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 
 		// Check if endpoint service exists, if not then create it.
 		ep := status.Endpoint
-		currService, err := config.clientServiceMan.Services.Get(ep).Do()
+		currService, err := ControllerConfig.clientServiceMan.Services.Get(ep).Do()
 		if err != nil {
 			if strings.Contains(err.Error(), "not found or permission denied") || (currService != nil && currService.HTTPStatusCode == 403) {
 				log.Printf("[INFO][%s] Service does not yet exist, creating: %s", parent.Name, ep)
-				_, err := config.clientServiceMan.Services.Create(&servicemanagement.ManagedService{
+				_, err := ControllerConfig.clientServiceMan.Services.Create(&servicemanagement.ManagedService{
 					ProducerProjectId: parent.Spec.Project,
 					ServiceName:       ep,
 				}).Do()
@@ -169,7 +144,7 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 
 		// Submit endpoint config if service exists.
 		ep := status.Endpoint
-		_, err = config.clientServiceMan.Services.Get(ep).Do()
+		_, err = ControllerConfig.clientServiceMan.Services.Get(ep).Do()
 		if err != nil {
 			log.Printf("[INFO][%s] Waiting for Endpoint creation: %s", parent.Name, ep)
 			return status, &desiredChildren, nil
@@ -192,7 +167,7 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 			},
 		}
 
-		op, err := config.clientServiceMan.Services.Configs.Submit(ep, &req).Do()
+		op, err := ControllerConfig.clientServiceMan.Services.Configs.Submit(ep, &req).Do()
 		if err != nil {
 			return status, &desiredChildren, fmt.Errorf("Failed to submit endpoint config: %v", err)
 		}
@@ -207,7 +182,7 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 		opDone := true
 		submitID := status.ConfigSubmit
 		if submitID != "NA" {
-			op, err := config.clientServiceMan.Operations.Get(submitID).Do()
+			op, err := ControllerConfig.clientServiceMan.Operations.Get(submitID).Do()
 			if err != nil {
 				return status, &desiredChildren, fmt.Errorf("Failed to get service submit operation id: %s", status.ConfigSubmit)
 			}
@@ -227,7 +202,7 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 		if opDone {
 			found := false
 
-			r, err := config.clientServiceMan.Services.Rollouts.List(ep).Do()
+			r, err := ControllerConfig.clientServiceMan.Services.Rollouts.List(ep).Do()
 			if err != nil {
 				return status, &desiredChildren, err
 			}
@@ -243,7 +218,7 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 				// Rollout config
 				log.Printf("[INFO][%s] Creating endpoint service config rollout for: endpoint: %s, config: %s", parent.Name, ep, cfg)
 
-				op, err := config.clientServiceMan.Services.Rollouts.Create(ep, &servicemanagement.Rollout{
+				op, err := ControllerConfig.clientServiceMan.Services.Rollouts.Create(ep, &servicemanagement.Rollout{
 					TrafficPercentStrategy: &servicemanagement.TrafficPercentStrategy{
 						Percentages: map[string]float64{
 							cfg: 100.0,
@@ -263,7 +238,7 @@ func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildre
 		ep := status.Endpoint
 		opName := status.ServiceRollout
 		if opName != "NA" {
-			op, err := config.clientServiceMan.Operations.Get(opName).Do()
+			op, err := ControllerConfig.clientServiceMan.Operations.Get(opName).Do()
 			if err != nil {
 				return status, &desiredChildren, err
 			}
@@ -299,7 +274,7 @@ func changeDetected(parent *CloudEndpoint, children *CloudEndpointControllerRequ
 		// Changed if using target ingress and ingress IP changes.
 		if parent.Spec.TargetIngress.Name != "" {
 			// Fetch the ingress
-			ingress, err := config.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(parent.Spec.TargetIngress.Name, metav1.GetOptions{})
+			ingress, err := ControllerConfig.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(parent.Spec.TargetIngress.Name, metav1.GetOptions{})
 			if err == nil {
 				// Compare ingress IP with configured IP
 				if len(ingress.Status.LoadBalancer.Ingress) > 0 && ingress.Status.LoadBalancer.Ingress[0].IP != status.IngressIP {
@@ -325,7 +300,7 @@ func getTargetIngress(parent *CloudEndpoint) (string, []string, error) {
 	var target string
 	var jwtAudiences []string
 
-	ingress, err := config.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(parent.Spec.TargetIngress.Name, metav1.GetOptions{})
+	ingress, err := ControllerConfig.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(parent.Spec.TargetIngress.Name, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("[INFO][%s] waiting for Ingress %s", parent.Name, parent.Spec.TargetIngress.Name)
 		return "", nil, nil
@@ -346,7 +321,7 @@ func getTargetIngress(parent *CloudEndpoint) (string, []string, error) {
 		bePatterns := make([]string, len(parent.Spec.TargetIngress.JWTServices))
 
 		for i, svcName := range parent.Spec.TargetIngress.JWTServices {
-			svc, err := config.clientset.CoreV1().Services(parent.Spec.TargetIngress.Namespace).Get(svcName, metav1.GetOptions{})
+			svc, err := ControllerConfig.clientset.CoreV1().Services(parent.Spec.TargetIngress.Namespace).Get(svcName, metav1.GetOptions{})
 			if err != nil {
 				return "", nil, fmt.Errorf("Failed to populate JWT audience from kubernetes service, not found: '%s', %v", svcName, err)
 			}
@@ -356,10 +331,10 @@ func getTargetIngress(parent *CloudEndpoint) (string, []string, error) {
 				for _, be := range ingBackends {
 					if strings.Contains(be, fmt.Sprintf("k8s-be-%s", nodePort)) {
 						bePatterns[i] = be
-						backend, err := config.clientCompute.BackendServices.Get(config.Project, be).Do()
+						backend, err := ControllerConfig.clientCompute.BackendServices.Get(ControllerConfig.Project, be).Do()
 						if err == nil {
 							found = true
-							jwtAud := makeJWTAudience(config.ProjectNum, strconv.Itoa(int(backend.Id)))
+							jwtAud := makeJWTAudience(ControllerConfig.ProjectNum, strconv.Itoa(int(backend.Id)))
 							log.Printf("[INFO][%s] Created jwtAud: %s", parent.Name, jwtAud)
 							jwtAudiences = append(jwtAudiences, jwtAud)
 						}
@@ -516,7 +491,7 @@ func toSha1(data string) string {
 }
 
 func getConfigMapSpecData(namespace string, name string, key string) (string, error) {
-	configMaps := config.clientset.CoreV1().ConfigMaps(namespace)
+	configMaps := ControllerConfig.clientset.CoreV1().ConfigMaps(namespace)
 	configMap, err := configMaps.Get(name, metav1.GetOptions{})
 	return configMap.Data[key], err
 }

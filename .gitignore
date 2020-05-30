@@ -1,3 +1,4 @@
+.idea/**
 service*.yaml
 *.log
 vendor/

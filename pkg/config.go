@@ -1,4 +1,4 @@
-package main
+package pkg
 
 import (
 	"log"
@@ -13,6 +13,12 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// TODO(jlewi): Do we really want globals?
+var (
+	ControllerConfig       Config
+	templatePath string
+)
+
 // Config is the configuration structure used by the LambdaController
 type Config struct {
 	Project          string
@@ -23,7 +29,8 @@ type Config struct {
 	serviceAccount   string
 }
 
-func (c *Config) loadAndValidate() error {
+// loadAndValidate initializes the config when running in cluster.
+func (c *Config) LoadAndValidate() error {
 	var err error
 
 	if c.Project == "" {
