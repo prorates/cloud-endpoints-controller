@@ -2,3 +2,4 @@
 service*.yaml
 *.log
 vendor/
+controller
