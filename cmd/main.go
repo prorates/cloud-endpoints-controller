@@ -3,7 +3,8 @@ package main
 import (
 	"flag"
 	"github.com/jlewi/cloud-endpoints-controller/pkg"
-	"log"
+	"github.com/onrik/logrus/filename"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -16,6 +17,13 @@ type options struct {
 func (o *options) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&o.path, "f", "", "The path of the file to process; if not set run in webhook mode")
 	fs.StringVar(&o.context, "context", "", "The kubernetes context to use; if not set uses the current context")
+}
+
+func init() {
+	// Add filename as one of the fields of the structured log message.
+	filenameHook := filename.NewHook()
+	filenameHook.Field = "filename"
+	log.AddHook(filenameHook)
 }
 
 func main() {

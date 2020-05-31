@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ghodss/yaml"
 	rm "google.golang.org/api/cloudresourcemanager/v1"
@@ -80,7 +81,7 @@ func Process(path string, kubeContext string) error {
 	}
 
 	config, err := clientcmd.LoadFromFile(kubeConfigFileName)
-	
+
 	if kubeContext != "" {
 		config.CurrentContext = kubeContext
 	}
@@ -104,11 +105,21 @@ func Process(path string, kubeContext string) error {
 
 	ControllerConfig.clientset = clientset
 
-	_, _, err = sync(endpoint, &CloudEndpointControllerRequestChildren{})
+	for ;; {
+		status, _, err := sync(endpoint, &CloudEndpointControllerRequestChildren{})
 
-	if err != nil {
-		log.Printf("Error occured trying to sync endpoint; %v", err)
-		return err
+		if err != nil {
+			log.Printf("Error occured trying to sync endpoint; %v", err)
+			return err
+		}
+
+		if status.StateCurrent == StateIdle {
+			log.Printf("Reached IDLE state")
+			return nil
+		}
+
+		endpoint.Status = *status
+		time.Sleep(5* time.Second)
 	}
 	return nil
 }

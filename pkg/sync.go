@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sort"
 	"strconv"
@@ -278,7 +278,8 @@ func changeDetected(parent *CloudEndpoint, children *CloudEndpointControllerRequ
 			if err == nil {
 				// Compare ingress IP with configured IP
 				if len(ingress.Status.LoadBalancer.Ingress) > 0 && ingress.Status.LoadBalancer.Ingress[0].IP != status.IngressIP {
-					log.Printf("[DEBUG][%s] Changed because ingress target IP changed", parent.Name)
+					ip := ingress.Status.LoadBalancer.Ingress[0].IP
+					log.Printf("[DEBUG][%s] Changed because ingress target IP changed; new IP: %v", parent.Name, ip)
 					changed = true
 				}
 			}
