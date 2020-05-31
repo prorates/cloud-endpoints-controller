@@ -12,3 +12,5 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/utils v0.0.0-20200529193333-24a76e807f40 // indirect
 )
+
+replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190620085101-78d2af792bab

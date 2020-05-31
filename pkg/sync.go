@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"sort"
@@ -14,6 +15,9 @@ import (
 	"strings"
 
 	"github.com/ghodss/yaml"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	rm "google.golang.org/api/cloudresourcemanager/v1"
 	servicemanagement "google.golang.org/api/servicemanagement/v1"
 	"html/template"
 	corev1 "k8s.io/api/core/v1"
@@ -62,6 +66,59 @@ func WebhookHandler() func(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprintf(w, string(data))
 	}
+}
+
+// Process process the path containing a CloudEndpoints resource
+// This is intended as the entrypoint when running in CLI mode.
+func Process(path string) error {
+	endpoint := &CloudEndpoint{}
+
+	data, err := ioutil.ReadFile(path)
+
+	if err != nil {
+		log.Printf("Error reading file: %v; error: %v", path, err)
+		return err
+	}
+
+	if err := yaml.Unmarshal(data, endpoint); err != nil {
+		log.Printf("Error unmarshaling %v; error: %v", path, err)
+		return err
+	}
+
+	if err := ControllerConfig.initGcpClients(); err != nil {
+		return err
+	}
+
+	ControllerConfig.Project = endpoint.Spec.Project
+
+	log.Printf("Get Project number for project: %v", ControllerConfig.Project)
+
+	clientScopes := []string{
+		rm.CloudPlatformScope,
+	}
+	client, err := google.DefaultClient(oauth2.NoContext, strings.Join(clientScopes, " "))
+
+	if err != nil {
+		return err
+	}
+
+	rmClient, err := rm.New(client)
+
+	if err != nil {
+		log.Printf("Could not create a new resource manager service")
+		return err
+	}
+
+	p, err := rmClient.Projects.Get(ControllerConfig.Project).Do()
+
+	if err != nil {
+		log.Printf("Error getting project: %v; error %v", ControllerConfig.Project, err)
+		return err
+	}
+
+	ControllerConfig.ProjectNum = strconv.FormatInt(p.ProjectNumber, 10)
+	log.Printf("Project %v has ProjectNumber %v ", ControllerConfig.Project, ControllerConfig.ProjectNum)
+	return nil
 }
 
 func sync(parent *CloudEndpoint, children *CloudEndpointControllerRequestChildren) (*CloudEndpointControllerStatus, *[]interface{}, error) {
