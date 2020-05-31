@@ -9,11 +9,13 @@ import (
 
 type options struct {
 	path string
+	context string
 }
 
 // AddFlags adds flags for a specific Server to the specified FlagSet
 func (o *options) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&o.path, "f", "", "The path of the file to process; if not set run in webhook mode")
+	fs.StringVar(&o.context, "context", "", "The kubernetes context to use; if not set uses the current context")
 }
 
 func main() {
@@ -41,7 +43,7 @@ func main() {
 		log.Fatal(http.ListenAndServe(":80", nil))
 	} else {
 		log.Printf("Running in CLI Mode")
-		if err := pkg.Process(o.path); err != nil {
+		if err := pkg.Process(o.path, o.context); err != nil {
 			log.Fatalf("Error occurred processing; %v; error: %v", o.path, err)
 		}
 	}
