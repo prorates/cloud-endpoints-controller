@@ -4,6 +4,7 @@ all: install
 
 build:
 	go build -o controller ./cmd/main.go
+	
 install:
 	go install
 

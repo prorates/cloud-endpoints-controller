@@ -16,6 +16,8 @@ const (
 	StateEndpointSubmitPending = "ENDPOINT_SUBMIT_PENDING"
 	//StateEndpointRolloutPending means the endpoint is pending rollout
 	StateEndpointRolloutPending = "ENDPOINT_ROLLOUT_PENDING" // Pending Rollout
+
+	Kind = "CloudEndpoint"
 )
 
 // SyncRequest describes the payload from the CompositeController hook
