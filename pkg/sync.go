@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
@@ -274,7 +275,7 @@ func changeDetected(parent *CloudEndpoint, children *CloudEndpointControllerRequ
 		// Changed if using target ingress and ingress IP changes.
 		if parent.Spec.TargetIngress.Name != "" {
 			// Fetch the ingress
-			ingress, err := ControllerConfig.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(parent.Spec.TargetIngress.Name, metav1.GetOptions{})
+			ingress, err := ControllerConfig.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(context.Background(), parent.Spec.TargetIngress.Name, metav1.GetOptions{})
 			if err == nil {
 				// Compare ingress IP with configured IP
 				if len(ingress.Status.LoadBalancer.Ingress) > 0 && ingress.Status.LoadBalancer.Ingress[0].IP != status.IngressIP {
@@ -301,7 +302,7 @@ func getTargetIngress(parent *CloudEndpoint) (string, []string, error) {
 	var target string
 	var jwtAudiences []string
 
-	ingress, err := ControllerConfig.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(parent.Spec.TargetIngress.Name, metav1.GetOptions{})
+	ingress, err := ControllerConfig.clientset.ExtensionsV1beta1().Ingresses(parent.Spec.TargetIngress.Namespace).Get(context.Background(), parent.Spec.TargetIngress.Name, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("[INFO][%s] waiting for Ingress %s", parent.Name, parent.Spec.TargetIngress.Name)
 		return "", nil, nil
@@ -322,7 +323,7 @@ func getTargetIngress(parent *CloudEndpoint) (string, []string, error) {
 		bePatterns := make([]string, len(parent.Spec.TargetIngress.JWTServices))
 
 		for i, svcName := range parent.Spec.TargetIngress.JWTServices {
-			svc, err := ControllerConfig.clientset.CoreV1().Services(parent.Spec.TargetIngress.Namespace).Get(svcName, metav1.GetOptions{})
+			svc, err := ControllerConfig.clientset.CoreV1().Services(parent.Spec.TargetIngress.Namespace).Get(context.Background(), svcName, metav1.GetOptions{})
 			if err != nil {
 				return "", nil, fmt.Errorf("Failed to populate JWT audience from kubernetes service, not found: '%s', %v", svcName, err)
 			}
@@ -493,6 +494,6 @@ func toSha1(data string) string {
 
 func getConfigMapSpecData(namespace string, name string, key string) (string, error) {
 	configMaps := ControllerConfig.clientset.CoreV1().ConfigMaps(namespace)
-	configMap, err := configMaps.Get(name, metav1.GetOptions{})
+	configMap, err := configMaps.Get(context.Background(), name, metav1.GetOptions{})
 	return configMap.Data[key], err
 }
